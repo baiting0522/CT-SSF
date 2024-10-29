@@ -6,6 +6,7 @@ Our code leverages several related open-source resources from previous work, inc
 Run the following command to install dependencies:
 ```bash
 pip install -r requirements.txt
+```bash
 
 If you find our work useful, please consider citing it.
 
