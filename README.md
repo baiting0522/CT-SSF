@@ -9,7 +9,29 @@ Run the following command to install dependencies:
 ```
 pip install -r requirements.txt
 ```
+Synthetic dataset:
+```
+python main.py --data x100-y10-reg --no-resume --feat_lr 0.001 --feat_step 80 --seed 0 1 2 3 4
+```
+
+Real data:
+```
+python main.py --data wind --no-resume --feat_lr 0.001 --feat_step 80 --seed 0 1 2 3 4
+python main.py --data electricity --no-resume --feat_lr 0.001 --feat_step 80 --seed 0 1 2 3 4
+python main.py --data Weather --no-resume --feat_lr 0.001 --feat_step 80 --seed 0 1 2 3 4
+python main.py --data Amazon --no-resume --feat_lr 0.001 --feat_step 80 --seed 0 1 2 3 4
+```
 
 If you find our work useful, please consider citing it.
+```
+@article{chen2024conformalized,
+  title={Conformalized time series with semantic features},
+  author={Chen, Baiting and Ren, Zhimei and Cheng, Lu},
+  journal={Advances in Neural Information Processing Systems},
+  volume={37},
+  pages={121449--121474},
+  year={2024}
+}
+```
 
 
