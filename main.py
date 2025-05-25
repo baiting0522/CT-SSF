@@ -144,9 +144,9 @@ if __name__ == '__main__':
         idx_train, idx_cal = list(range(n_train))[:n_half], list(range(n_train))[n_half:2 * n_half]
 
         # define the weights
-        rho = 1
+        #rho = 1
         n = len(x_train[idx_cal,:])
-        weights = rho**(np.arange(n,0,-1))
+        #weights = rho**(np.arange(n,0,-1))
         #weights = weights / (np.sum(weights))
 
         # define the weights by similarity between the features
