@@ -184,17 +184,25 @@ class FeatRegressorNc(BaseModelNc):
         self.g_out_process = g_out_process
         self.weights = weights     
 
-    def inv_g(self, z0, y, step=None, record_each_step=False):
-        z = z0.detach().clone()
-        z = z.detach()
-        z.requires_grad_()
-        if self.cert_optimizer == "sgd":
-            optimizer = torch.optim.SGD([z], lr=self.inv_lr)
-        elif self.cert_optimizer == "adam":
-            optimizer = torch.optim.Adam([z], lr=self.inv_lr)
+    def inv_g(self, weights, z0, y, step=None, record_each_step=False):
+        z = z0.detach()
+        self.model.model.train()
 
-        self.model.model.eval()
-        each_step_z = []
+        # Load the input weights (assumed to be a state_dict)
+        self.model.model.g.load_state_dict(weights, strict=True)
+
+        # Make sure weights are differentiable
+        for param in self.model.model.g.parameters():
+            param.requires_grad = True
+
+        # Optimizer for model weights
+        if self.cert_optimizer == "sgd":
+            optimizer = torch.optim.SGD(self.model.model.g.parameters(), lr=self.inv_lr)
+        elif self.cert_optimizer == "adam":
+            optimizer = torch.optim.Adam(self.model.model.g.parameters(), lr=self.inv_lr)
+
+        each_step_weights = []
+
         for _ in range(step):
             pred = self.model.model.g(z)
             if self.g_out_process is not None:
@@ -204,13 +212,20 @@ class FeatRegressorNc(BaseModelNc):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
             if record_each_step:
-                each_step_z.append(z.detach().cpu().clone())
+                # Save a clone of current weights
+                current_weights = {
+                    k: v.detach().cpu().clone()
+                    for k, v in self.model.model.g.state_dict().items()
+            }
+                each_step_weights.append(current_weights)
 
         if record_each_step:
-            return each_step_z
+            return each_step_weights
         else:
-            return z.detach().cpu()
+            return self.model.model.g.state_dict()
+
 
     def get_each_step_err_dist(self, x, y, z_pred, steps):
         each_step_z_true = self.inv_g(z_pred, y, step=steps, record_each_step=True)
@@ -350,10 +365,7 @@ class FeatRegressorNc(BaseModelNc):
 
         ret_val = self.err_func.apply(z_pred.detach().cpu(), z_true.detach().cpu())  # || z_pred - z_true ||
         ret_val = ret_val.numpy()  / norm
-        '''if len(ret_val) == 1377:
-            ret_val = np.dot(self.weights[:len(ret_val),:len(ret_val)] , ret_val)
-        else:
-            ret_val = np.dot(self.weights[self.weights.shape[0]-len(ret_val):,self.weights.shape[0]-len(ret_val)] , ret_val)'''
+
         ret_val_tensor = torch.from_numpy(ret_val).float().unsqueeze(0).unsqueeze(2)
         #model = TimeSeriesTransformer(1, 1, 3, len(ret_val), 4, 0.1)
         #out, attention_weights_list = model(ret_val_tensor)
@@ -385,6 +397,14 @@ class FeatRegressorNc(BaseModelNc):
             ret_val.append(batch_ret_val)
         ret_val = np.concatenate(ret_val, axis=0)
         return ret_val
+    
+    def weighted_quantile(values, weights, quantile):
+        sorter = np.argsort(values)
+        values = values[sorter]
+        weights = weights[sorter]
+        cum_weights = np.cumsum(weights)
+        normalized_weights = cum_weights / cum_weights[-1]
+        return values[np.searchsorted(normalized_weights, quantile)]
 
     def predict(self, x, nc, significance=None):
         n_test = x.shape[0]
@@ -397,8 +417,9 @@ class FeatRegressorNc(BaseModelNc):
 
         if significance:
             intervals = np.zeros((x.shape[0], self.model.model.out_shape, 2))
-            feat_err_dist = self.err_func.apply_inverse(nc, significance)
-
+            attention_weights = self.compute_attention_weights(x_calib)  # assumes x_calib is available
+            feat_err_dist = weighted_quantile(nc, attention_weights, 1 - significance)
+           
             if prediction.ndim > 1:
                 if isinstance(x, torch.Tensor):
                     x = x.to(self.model.device)
